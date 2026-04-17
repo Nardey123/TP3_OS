@@ -1,21 +1,23 @@
-CC      = gcc
-CFLAGS  = -Wall -Wextra -pthread
-TARGET  = biceps
+CC        = gcc
+CFLAGS    = -Wall -Wextra -Werror -pthread
+TARGET    = biceps
+TARGET_ML = biceps-memory-leaks
 
 all: $(TARGET)
 
 $(TARGET): biceps.c
 	$(CC) $(CFLAGS) -o $(TARGET) biceps.c
 
-# Compilation avec traces niveau 1
+memory-leak: biceps.c
+	$(CC) $(CFLAGS) -g -O0 -o $(TARGET_ML) biceps.c
+
 trace: biceps.c
 	$(CC) $(CFLAGS) -DTRACE -o $(TARGET) biceps.c
 
-# Compilation avec traces niveau 1 et 2
 trace2: biceps.c
 	$(CC) $(CFLAGS) -DTRACE -DTRACE2 -o $(TARGET) biceps.c
 
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGET) $(TARGET_ML)
 
-.PHONY: all trace trace2 clean
+.PHONY: all memory-leak trace trace2 clean

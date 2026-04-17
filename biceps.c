@@ -46,6 +46,7 @@
 #define BEUIP_MAGIC_LEN 5
 #define MAX_MSG         512
 #define LPSEUDO         23
+#define BEUIP_BROADCAST "192.168.88.255"
 
 /* un contact = son pseudo + son IP */
 struct elt {
@@ -148,19 +149,14 @@ void supprimeElt(char *adip)
     pthread_mutex_unlock(&mutex_liste);
 }
 
-/* affiche tous les contacts (commande "mess liste") */
+/* affiche tous les contacts au format "IP : pseudo" */
 void listeElts(void)
 {
     struct elt *cur;
-    int count = 0;
 
     pthread_mutex_lock(&mutex_liste);
-    printf("--- Liste des contacts BEUIP ---\n");
-    for (cur = liste; cur; cur = cur->next) {
-        printf("  %-24s %s\n", cur->nom, cur->adip);
-        count++;
-    }
-    printf("Total: %d\n", count);
+    for (cur = liste; cur; cur = cur->next)
+        printf("%s : %s\n", cur->adip, cur->nom);
     pthread_mutex_unlock(&mutex_liste);
 }
 
@@ -266,6 +262,9 @@ static void send_broadcast_all(char code, const void *payload, size_t plen)
     }
 
     freeifaddrs(ifaddr);
+
+    /* adresse de broadcast du sous-reseau de la salle */
+    send_beuip_to(BEUIP_BROADCAST, code, payload, plen);
 }
 
 /* --- commande() : gere '3', '4', '5' directement en memoire ---
@@ -793,15 +792,15 @@ static char *skip_spaces(char *s)
 static void print_help(void)
 {
     puts("Commandes disponibles:");
-    puts("  beuip start <pseudo>         -- se connecter au reseau");
-    puts("  beuip stop                   -- se deconnecter");
-    puts("  beuip ls <pseudo>            -- voir les fichiers publics d'un contact");
-    puts("  beuip get <pseudo> <fichier> -- telecharger un fichier");
-    puts("  mess liste                   -- voir les contacts connectes");
-    puts("  mess all <message>           -- envoyer un message a tout le monde");
-    puts("  mess <pseudo> <message>      -- envoyer un message prive");
-    puts("  help                         -- afficher cette aide");
-    puts("  exit | quit                  -- quitter");
+    puts("  beuip start <pseudo>              -- se connecter au reseau");
+    puts("  beuip stop                        -- se deconnecter");
+    puts("  beuip list                        -- voir les contacts connectes");
+    puts("  beuip message all <message>       -- envoyer un message a tout le monde");
+    puts("  beuip message <pseudo> <message>  -- envoyer un message prive");
+    puts("  beuip ls <pseudo>                 -- voir les fichiers publics d'un contact");
+    puts("  beuip get <pseudo> <fichier>      -- telecharger un fichier");
+    puts("  help                              -- afficher cette aide");
+    puts("  exit | quit                       -- quitter");
 }
 
 int main(void)
@@ -845,6 +844,36 @@ int main(void)
 
         if (strcmp(cmd, "beuip stop") == 0) {
             do_beuip_stop();
+            continue;
+        }
+
+        if (strcmp(cmd, "beuip list") == 0) {
+            if (!serveur_actif) { fprintf(stderr, "Serveur non actif\n"); continue; }
+            commande('3', NULL, NULL);
+            continue;
+        }
+
+        if (strncmp(cmd, "beuip message", 13) == 0 &&
+            (cmd[13] == ' ' || cmd[13] == '\t' || cmd[13] == '\0')) {
+            char *args = skip_spaces(cmd + 13);
+            if (!serveur_actif) { fprintf(stderr, "Serveur non actif\n"); continue; }
+
+            if (strncmp(args, "all", 3) == 0 && (args[3] == ' ' || args[3] == '\t')) {
+                char *msg = skip_spaces(args + 3);
+                if (*msg == '\0') { fprintf(stderr, "Message manquant\n"); continue; }
+                commande('5', msg, NULL);
+                continue;
+            }
+
+            {
+                char *pseudo = args, *msg, *p = args;
+                while (*p && *p != ' ' && *p != '\t') p++;
+                if (*p == '\0') { fprintf(stderr, "Usage: beuip message <pseudo> <message>\n"); continue; }
+                *p = '\0';
+                msg = skip_spaces(p + 1);
+                if (*pseudo == '\0' || *msg == '\0') { fprintf(stderr, "Usage: beuip message <pseudo> <message>\n"); continue; }
+                commande('4', msg, pseudo);
+            }
             continue;
         }
 
